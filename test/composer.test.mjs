@@ -38,3 +38,27 @@ test('composer view keeps the cursor line visible', () => {
 		hasLinesBelow: false,
 	});
 });
+
+test('up moves to the previous line at the same column', () => {
+	const result = applyComposerEdit(
+		{ text: 'hello\nworld', cursor: 8 },
+		{ type: 'up' },
+	);
+
+	assert.deepEqual(result, {
+		state: { text: 'hello\nworld', cursor: 2 },
+		submittedText: null,
+	});
+});
+
+test('down clamps to the end of a shorter line', () => {
+	const result = applyComposerEdit(
+		{ text: 'hello\nhi', cursor: 4 },
+		{ type: 'down' },
+	);
+
+	assert.deepEqual(result, {
+		state: { text: 'hello\nhi', cursor: 8 },
+		submittedText: null,
+	});
+});

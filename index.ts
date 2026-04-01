@@ -222,12 +222,14 @@ class ReadModeComponent implements Component, Focusable {
 		if (matchesKey(data, "end"))      { this.scrollOffset = this.maxScroll(); return; }
 
 		// Input line editing
-		if (matchesKey(data, "backspace")) { this.applyComposerEvent({ type: "backspace" }); return; }
-		if (matchesKey(data, "delete"))    { this.applyComposerEvent({ type: "delete" }); return; }
-		if (matchesKey(data, "left"))      { this.applyComposerEvent({ type: "left" }); return; }
-		if (matchesKey(data, "right"))     { this.applyComposerEvent({ type: "right" }); return; }
-		if (matchesKey(data, "ctrl+a"))    { this.applyComposerEvent({ type: "moveToStart" }); return; }
-		if (matchesKey(data, "ctrl+e"))    { this.applyComposerEvent({ type: "moveToEnd" }); return; }
+		if (matchesKey(data, "backspace"))             { this.applyComposerEvent({ type: "backspace" }); return; }
+		if (matchesKey(data, "delete") || matchesKey(data, "ctrl+d")) { this.applyComposerEvent({ type: "delete" }); return; }
+		if (matchesKey(data, "left") || matchesKey(data, "ctrl+b"))   { this.applyComposerEvent({ type: "left" }); return; }
+		if (matchesKey(data, "right") || matchesKey(data, "ctrl+f"))  { this.applyComposerEvent({ type: "right" }); return; }
+		if (matchesKey(data, "ctrl+p"))               { this.applyComposerEvent({ type: "up" }); return; }
+		if (matchesKey(data, "ctrl+n"))               { this.applyComposerEvent({ type: "down" }); return; }
+		if (matchesKey(data, "ctrl+a"))               { this.applyComposerEvent({ type: "moveToStart" }); return; }
+		if (matchesKey(data, "ctrl+e"))               { this.applyComposerEvent({ type: "moveToEnd" }); return; }
 		if (matchesKey(data, "ctrl+u"))    { this.applyComposerEvent({ type: "deleteToStart" }); return; }
 		if (matchesKey(data, "ctrl+k"))    { this.applyComposerEvent({ type: "deleteToEnd" }); return; }
 		if (matchesKey(data, "ctrl+w") || matchesKey(data, "alt+backspace")) {
@@ -321,7 +323,7 @@ class ReadModeComponent implements Component, Focusable {
 		lines.push(...composerLines);
 		lines.push(this.renderHr(width));
 		lines.push(truncateToWidth(
-			th.fg("dim", "  ↑↓ scroll • PgUp/PgDn page • Home/End • Shift+Enter newline • Enter send • Esc cancel"),
+			th.fg("dim", "  ↑↓ scroll • Ctrl+P/N composer • PgUp/PgDn page • Home/End • Shift+Enter newline • Enter send • Esc cancel"),
 			width,
 		));
 

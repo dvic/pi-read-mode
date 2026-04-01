@@ -10,6 +10,8 @@ type ComposerEvent =
 	| { type: "delete" }
 	| { type: "left" }
 	| { type: "right" }
+	| { type: "up" }
+	| { type: "down" }
 	| { type: "moveToStart" }
 	| { type: "moveToEnd" }
 	| { type: "deleteToStart" }
@@ -68,6 +70,16 @@ export function applyComposerEdit(state: ComposerState, event: ComposerEvent): C
 		case "right":
 			return {
 				state: { text: state.text, cursor: Math.min(state.text.length, state.cursor + 1) },
+				submittedText: null,
+			};
+		case "up":
+			return {
+				state: moveVertical(state, -1),
+				submittedText: null,
+			};
+		case "down":
+			return {
+				state: moveVertical(state, 1),
 				submittedText: null,
 			};
 		case "moveToStart":
@@ -129,5 +141,30 @@ function deleteWordBackward(state: ComposerState): ComposerState {
 	return {
 		text: before.slice(0, end) + state.text.slice(state.cursor),
 		cursor: end,
+	};
+}
+
+function moveVertical(state: ComposerState, direction: -1 | 1): ComposerState {
+	const lineStart = state.text.lastIndexOf("\n", Math.max(0, state.cursor - 1)) + 1;
+	const column = state.cursor - lineStart;
+
+	if (direction === -1) {
+		if (lineStart === 0) return state;
+		const previousLineEnd = lineStart - 1;
+		const previousLineStart = state.text.lastIndexOf("\n", Math.max(0, previousLineEnd - 1)) + 1;
+		return {
+			text: state.text,
+			cursor: previousLineStart + Math.min(column, previousLineEnd - previousLineStart),
+		};
+	}
+
+	const lineEnd = state.text.indexOf("\n", lineStart);
+	if (lineEnd === -1) return state;
+	const nextLineStart = lineEnd + 1;
+	const nextLineEnd = state.text.indexOf("\n", nextLineStart);
+	const boundedNextLineEnd = nextLineEnd === -1 ? state.text.length : nextLineEnd;
+	return {
+		text: state.text,
+		cursor: nextLineStart + Math.min(column, boundedNextLineEnd - nextLineStart),
 	};
 }
