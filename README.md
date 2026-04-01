@@ -2,6 +2,10 @@
 
 Scroll through conversation history while composing a follow-up message. Solves the problem where typing in pi's composer snaps the terminal back to the bottom, losing your scroll position.
 
+<p align="center">
+  <img src="assets/demo.gif" alt="pi-read-mode demo — scrolling history while composing a follow-up" width="700">
+</p>
+
 ## Install
 
 ```bash
