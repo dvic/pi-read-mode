@@ -24,13 +24,14 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@mariozechner/pi-tui";
+import { applyComposerEdit, getVisibleComposerLines } from "./composer.ts";
 
 interface ReadModeResult { text: string }
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const HEADER_LINES = 4;
-const FOOTER_LINES = 5;
+const COMPOSER_MAX_LINES = 3;
 const SCROLL_STEP_MOUSE = 3;
 
 // Pre-compiled regexes for mouse sequence parsing
@@ -117,16 +118,21 @@ class ReadModeComponent implements Component, Focusable {
 
 	// ── Scroll helpers ────────────────────────────────────────────────────
 
-	private vh(): number {
-		return Math.max(1, this.tui.terminal.rows - HEADER_LINES - FOOTER_LINES);
+	private footerHeight(width = this.tui.terminal.columns): number {
+		return 4 + this.getComposerRenderLines(width).length;
 	}
 
-	private maxScroll(): number {
-		return Math.max(0, this.contentLines.length - this.vh());
+	private vh(width = this.tui.terminal.columns): number {
+		return Math.max(1, this.tui.terminal.rows - HEADER_LINES - this.footerHeight(width));
+	}
+
+	private maxScroll(width = this.tui.terminal.columns): number {
+		return Math.max(0, this.contentLines.length - this.vh(width));
 	}
 
 	private scrollBy(delta: number): void {
-		this.scrollOffset = Math.max(0, Math.min(this.maxScroll(), this.scrollOffset + delta));
+		const width = this.tui.terminal.columns;
+		this.scrollOffset = Math.max(0, Math.min(this.maxScroll(width), this.scrollOffset + delta));
 	}
 
 	// ── Mouse parsing ─────────────────────────────────────────────────────
@@ -151,9 +157,48 @@ class ReadModeComponent implements Component, Focusable {
 
 	// ── Input handling ────────────────────────────────────────────────────
 
-	private insertAtCursor(text: string): void {
-		this.inputText = this.inputText.slice(0, this.inputCursor) + text + this.inputText.slice(this.inputCursor);
-		this.inputCursor += text.length;
+	private applyComposerEvent(event: { type: string; text?: string }): string | null {
+		const result = applyComposerEdit(
+			{ text: this.inputText, cursor: this.inputCursor },
+			event,
+		);
+		this.inputText = result.state.text;
+		this.inputCursor = result.state.cursor;
+		return result.submittedText;
+	}
+
+	private getComposerRenderLines(width: number): string[] {
+		const th = this.theme;
+		const view = getVisibleComposerLines(this.inputText, this.inputCursor, COMPOSER_MAX_LINES);
+		const lines: string[] = [];
+		const prefix = (index: number) => index === 0 ? th.fg("accent", "> ") : "  ";
+
+		if (view.hasLinesAbove) {
+			lines.push(truncateToWidth(th.fg("dim", "  ↑ earlier composer lines"), width));
+		}
+
+		for (let i = 0; i < view.lines.length; i++) {
+			const line = view.lines[i]!;
+			if (i === view.cursorLine) {
+				const before = line.slice(0, view.cursorColumn);
+				const after = line.slice(view.cursorColumn);
+				const cursorChar = after.length > 0 ? after[0]! : " ";
+				const rest = after.length > 0 ? after.slice(1) : "";
+				const marker = this.focused ? CURSOR_MARKER : "";
+				lines.push(truncateToWidth(
+					prefix(i) + `${before}${marker}\x1b[7m${cursorChar}\x1b[27m${rest}`,
+					width,
+				));
+			} else {
+				lines.push(truncateToWidth(prefix(i) + line, width));
+			}
+		}
+
+		if (view.hasLinesBelow) {
+			lines.push(truncateToWidth(th.fg("dim", "  ↓ later composer lines"), width));
+		}
+
+		return lines;
 	}
 
 	handleInput(data: string): void {
@@ -162,8 +207,13 @@ class ReadModeComponent implements Component, Focusable {
 		if (wheelDelta !== 0) { this.scrollBy(wheelDelta); return; }
 
 		// Navigation
-		if (matchesKey(data, "escape"))   { this.wrappedDone(null); return; }
-		if (matchesKey(data, "enter"))    { const t = this.inputText.trim(); if (t) this.wrappedDone({ text: t }); return; }
+		if (matchesKey(data, "escape"))      { this.wrappedDone(null); return; }
+		if (matchesKey(data, "shift+enter")) { this.applyComposerEvent({ type: "newline" }); return; }
+		if (matchesKey(data, "enter")) {
+			const text = this.applyComposerEvent({ type: "submit" });
+			if (text) this.wrappedDone({ text });
+			return;
+		}
 		if (matchesKey(data, "pageUp"))   { this.scrollBy(-(this.vh() - 2)); return; }
 		if (matchesKey(data, "pageDown")) { this.scrollBy(this.vh() - 2); return; }
 		if (matchesKey(data, "up"))       { this.scrollBy(-1); return; }
@@ -172,45 +222,29 @@ class ReadModeComponent implements Component, Focusable {
 		if (matchesKey(data, "end"))      { this.scrollOffset = this.maxScroll(); return; }
 
 		// Input line editing
-		if (matchesKey(data, "backspace")) {
-			if (this.inputCursor > 0) {
-				this.inputText = this.inputText.slice(0, this.inputCursor - 1) + this.inputText.slice(this.inputCursor);
-				this.inputCursor--;
-			}
-			return;
-		}
-		if (matchesKey(data, "delete")) {
-			if (this.inputCursor < this.inputText.length) {
-				this.inputText = this.inputText.slice(0, this.inputCursor) + this.inputText.slice(this.inputCursor + 1);
-			}
-			return;
-		}
-		if (matchesKey(data, "left"))   { if (this.inputCursor > 0) this.inputCursor--; return; }
-		if (matchesKey(data, "right"))  { if (this.inputCursor < this.inputText.length) this.inputCursor++; return; }
-		if (matchesKey(data, "ctrl+a")) { this.inputCursor = 0; return; }
-		if (matchesKey(data, "ctrl+e")) { this.inputCursor = this.inputText.length; return; }
-		if (matchesKey(data, "ctrl+u")) { this.inputText = this.inputText.slice(this.inputCursor); this.inputCursor = 0; return; }
-		if (matchesKey(data, "ctrl+k")) { this.inputText = this.inputText.slice(0, this.inputCursor); return; }
+		if (matchesKey(data, "backspace")) { this.applyComposerEvent({ type: "backspace" }); return; }
+		if (matchesKey(data, "delete"))    { this.applyComposerEvent({ type: "delete" }); return; }
+		if (matchesKey(data, "left"))      { this.applyComposerEvent({ type: "left" }); return; }
+		if (matchesKey(data, "right"))     { this.applyComposerEvent({ type: "right" }); return; }
+		if (matchesKey(data, "ctrl+a"))    { this.applyComposerEvent({ type: "moveToStart" }); return; }
+		if (matchesKey(data, "ctrl+e"))    { this.applyComposerEvent({ type: "moveToEnd" }); return; }
+		if (matchesKey(data, "ctrl+u"))    { this.applyComposerEvent({ type: "deleteToStart" }); return; }
+		if (matchesKey(data, "ctrl+k"))    { this.applyComposerEvent({ type: "deleteToEnd" }); return; }
 		if (matchesKey(data, "ctrl+w") || matchesKey(data, "alt+backspace")) {
-			const before = this.inputText.slice(0, this.inputCursor);
-			let end = before.length;
-			while (end > 0 && before[end - 1] === " ") end--;
-			while (end > 0 && before[end - 1] !== " ") end--;
-			this.inputText = before.slice(0, end) + this.inputText.slice(this.inputCursor);
-			this.inputCursor = end;
+			this.applyComposerEvent({ type: "deleteWordBackward" });
 			return;
 		}
 
 		// Bracketed paste: \x1b[200~<text>\x1b[201~
 		if (data.startsWith("\x1b[200~")) {
 			const text = data.replace(/^\x1b\[200~/, "").replace(/\x1b\[201~$/, "");
-			if (text) this.insertAtCursor(text);
+			if (text) this.applyComposerEvent({ type: "insert", text });
 			return;
 		}
 
 		// Printable character insertion (also handles plain paste without brackets)
 		if (data.length >= 1 && data.charCodeAt(0) >= 32 && !data.startsWith("\x1b")) {
-			this.insertAtCursor(data);
+			this.applyComposerEvent({ type: "insert", text: data });
 		}
 	}
 
@@ -249,7 +283,8 @@ class ReadModeComponent implements Component, Focusable {
 		const th = this.theme;
 		const termRows = this.tui.terminal.rows;
 		const all = this.renderContent(width);
-		const vh = this.vh();
+		const composerLines = this.getComposerRenderLines(width);
+		const vh = this.vh(width);
 		const total = all.length;
 		const maxS = Math.max(0, total - vh);
 		// On first fullscreen render, jump to bottom so most recent content is visible
@@ -277,26 +312,16 @@ class ReadModeComponent implements Component, Focusable {
 		// Pad remaining viewport
 		for (let i = visible.length; i < vh; i++) lines.push("");
 
-		// Footer (5 lines)
+		// Footer
 		const below = total - (this.scrollOffset + vh);
 		lines.push(below > 0
 			? truncateToWidth(th.fg("dim", `  ↓ ${below} more below`), width)
 			: "");
 		lines.push(this.renderHr(width));
-
-		// Input line with cursor
-		const before = this.inputText.slice(0, this.inputCursor);
-		const after = this.inputText.slice(this.inputCursor);
-		const cursorChar = after.length > 0 ? after[0] : " ";
-		const rest = after.length > 0 ? after.slice(1) : "";
-		const marker = this.focused ? CURSOR_MARKER : "";
-		lines.push(truncateToWidth(
-			th.fg("accent", "> ") + `${before}${marker}\x1b[7m${cursorChar}\x1b[27m${rest}`,
-			width,
-		));
+		lines.push(...composerLines);
 		lines.push(this.renderHr(width));
 		lines.push(truncateToWidth(
-			th.fg("dim", "  ↑↓ scroll • PgUp/PgDn page • Home/End • Enter send • Esc cancel"),
+			th.fg("dim", "  ↑↓ scroll • PgUp/PgDn page • Home/End • Shift+Enter newline • Enter send • Esc cancel"),
 			width,
 		));
 

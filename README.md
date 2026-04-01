@@ -25,7 +25,7 @@ pi install git:github.com/minghinmatthewlam/pi-read-mode
 - **Keyboard scrolling** — arrow keys, Page Up/Down, Home/End
 - **Mouse/trackpad scrolling** — scroll wheel works in the viewport
 - **Paste support** — text paste and image-to-filepath paste (via Ghostty/iTerm2)
-- **Composer at bottom** — single-line input with Emacs-style editing
+- **Composer at bottom** — compact multiline input with Emacs-style editing
 
 ## Usage
 
@@ -36,6 +36,7 @@ pi install git:github.com/minghinmatthewlam/pi-read-mode
 | `Up` / `Down` | Scroll one line |
 | `Page Up` / `Page Down` | Scroll one page |
 | `Home` / `End` | Jump to top / bottom |
+| `Shift+Enter` | Insert newline |
 | `Enter` | Send follow-up message |
 | `Escape` | Cancel and exit |
 
